@@ -182,6 +182,8 @@ export function decodePngRgba8(
   let transparencySeen = false;
   const idatParts: Uint8Array[] = [];
   let idatLength = 0;
+  // Once any non-IDAT follows image data, another IDAT is forbidden.
+  let idatSequenceEnded = false;
   let seenIend = false;
 
   let pos = 8;
@@ -195,6 +197,8 @@ export function decodePngRgba8(
     const dataPos = pos + 8;
     const crcPos = pos + 8 + length;
     if (crc32(bytes, typePos, crcPos) !== u32be(bytes, crcPos)) fail('crc', 'Chunk CRC mismatch');
+    const isIdat = typeIs(bytes, typePos, 73, 68, 65, 84);
+    if (!isIdat && idatParts.length > 0) idatSequenceEnded = true;
     if (typeIs(bytes, typePos, 73, 72, 68, 82)) {
       if (!first) fail('header', 'Duplicate IHDR');
       if (length !== 13) fail('header', 'First chunk is not IHDR');
@@ -222,16 +226,19 @@ export function decodePngRgba8(
     } else if (typeIs(bytes, typePos, 80, 76, 84, 69)) {
       if (!seenIhdr) fail('header', 'First chunk is not IHDR');
       if (palette) fail('header', 'Duplicate PLTE');
+      if (idatParts.length > 0) fail('chunk', 'PLTE must precede IDAT');
       palette = bytes.subarray(dataPos, dataPos + length);
       first = false;
-    } else if (typeIs(bytes, typePos, 73, 68, 65, 84)) {
+    } else if (isIdat) {
       if (!seenIhdr) fail('header', 'First chunk is not IHDR');
+      if (idatSequenceEnded) fail('chunk', 'IDAT chunks are not consecutive');
       idatParts.push(bytes.subarray(dataPos, dataPos + length));
       idatLength += length;
       first = false;
     } else if (typeIs(bytes, typePos, 73, 69, 78, 68)) {
       if (!seenIhdr) fail('header', 'First chunk is not IHDR');
       if (seenIend) fail('chunk', 'Second IEND');
+      if (length !== 0) fail('chunk', 'IEND is not empty');
       if (crcPos + 4 !== bytes.length) fail('chunk', 'IEND is not the last chunk');
       seenIend = true;
       pos = bytes.length;
