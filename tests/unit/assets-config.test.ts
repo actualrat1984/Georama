@@ -495,7 +495,7 @@ describe('module hygiene', () => {
     const specs = [...src.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1]);
     expect(specs.length).toBeGreaterThan(0);
     for (const spec of specs) {
-      expect(['node:fs/promises', 'node:path', 'node:os']).toContain(spec);
+      expect(['node:fs/promises', 'node:path', 'node:os', '../native-path.ts']).toContain(spec);
     }
     expect(src).not.toContain('require(');
   });

@@ -33,7 +33,9 @@ export async function portableSourceFiles(): Promise<string[]> {
 export function runTsc(config: string, listFilesOnly = false) {
   const args = ['-p', config, '--noEmit', '--pretty', 'false'];
   if (listFilesOnly) args.push('--listFilesOnly');
-  const result = spawnSync(path.join(projectRoot, 'node_modules/.bin/tsc'), args, {
+  // Invoke the platform-neutral JS CLI: .bin/tsc is a POSIX shim, not a Windows executable.
+  const compiler = path.join(projectRoot, 'node_modules', 'typescript', 'bin', 'tsc');
+  const result = spawnSync(process.execPath, [compiler, ...args], {
     cwd: projectRoot,
     encoding: 'utf8',
     timeout: 60_000,
@@ -49,7 +51,8 @@ export function listedFiles(output: string): string[] {
   if (files.some((filename) => !path.isAbsolute(filename))) {
     throw new Error(`Expected absolute paths from tsc --listFilesOnly:\n${output}`);
   }
-  return files;
+  // Diagnostics vary in native path separators. Keep comparisons platform-neutral.
+  return files.map((filename) => filename.replaceAll(path.sep, '/'));
 }
 
 export async function withFixtureProject<T>(
@@ -84,7 +87,7 @@ export async function coreClosedWorld(files: string[], fixtureFiles: string[] = 
   return canonical.filter((filename) => !allowedFiles.has(filename)
     && !allowedRoots.some((directory) => isInside(filename, directory))
     && !(path.dirname(filename) === libDirectory && /^lib\..+\.d\.ts$/.test(path.basename(filename))))
-    .map((filename) => `closed-world core: ${filename}`);
+    .map((filename) => `closed-world core: ${filename.replaceAll(path.sep, '/')}`);
 }
 
 export function rendererClosedWorld(files: string[]): string[] {

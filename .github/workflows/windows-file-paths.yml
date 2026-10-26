@@ -1,0 +1,50 @@
+name: Windows paths and selected files
+
+on:
+  pull_request:
+  push:
+    branches: [main, 'feat/windows-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Do not spend runner minutes on superseded feature-branch commits.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  file-contracts:
+    name: File contracts on ${{ matrix.os }}
+    # Optional organization/repository Actions variable:
+    # GEORAMA_WINDOWS_RUNNER_JSON = {"group":"your-group","labels":["self-hosted","Windows","X64"]}
+    # Unset => GitHub-hosted windows-latest. Ubuntu always uses ubuntu-latest.
+    runs-on: ${{ fromJSON(matrix.os == 'windows-latest' && (vars.GEORAMA_WINDOWS_RUNNER_JSON || '"windows-latest"') || '"ubuntu-latest"') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Shared path policy
+        run: npx vitest run tests/unit/native-path.test.ts
+      - name: Native Windows selected-map/config and root-discovery tests
+        if: runner.os == 'Windows'
+        run: npx vitest run tests/unit/windows-selected-files.test.ts
+      - name: Original Linux filesystem contracts
+        if: runner.os == 'Linux'
+        run: >-
+          npx vitest run
+          tests/unit/selected-data-file.test.ts
+          tests/unit/selected-data-file-strength.test.ts
+          tests/unit/assets-config.test.ts
+          tests/unit/assets-config-strength.test.ts
+          tests/unit/assets-open.test.ts
+          tests/unit/assets-pck-file.test.ts

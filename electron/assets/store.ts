@@ -1,4 +1,4 @@
-import path from 'node:path';
+import { isNativeAbsolutePath } from '../native-path.ts';
 import { openPckFile } from './pck-file.ts';
 import type { PckFile } from './pck-file.ts';
 import { readAssetFile } from './open.ts';
@@ -70,18 +70,10 @@ function fail(code: AssetStoreErrorCode, message: string): never {
   throw new AssetStoreError(code, message);
 }
 
-const BAD_ROOT_CHAR = /[\x00-\x1f\x7f-\x9f\p{Surrogate}]/u;
-
 function checkRoot(value: unknown): string {
   if (typeof value !== 'string') fail('ROOT', 'Asset root must be a normalized absolute directory');
   const root = value as string;
-  if (
-    root.length === 0 ||
-    root.length > 4096 ||
-    !root.startsWith('/') ||
-    BAD_ROOT_CHAR.test(root) ||
-    path.posix.normalize(root) !== root
-  ) {
+  if (!isNativeAbsolutePath(root)) {
     fail('ROOT', 'Asset root must be a normalized absolute directory');
   }
   return root;

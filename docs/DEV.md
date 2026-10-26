@@ -10,6 +10,45 @@ Gates run on Node 22: `.nvmrc` pins the version, and `typecheck`, `test`, `build
 
 The launcher uses Electron from the local dependency and resolves the display with the pure function `resolveDisplayEnv` in `scripts/display-env.mjs`. A set `WAYLAND_DISPLAY` is kept; if its socket exists (an absolute value is used as is, a relative one is joined to `XDG_RUNTIME_DIR`, or to `/run/user/<uid>` when that is unset) the launcher adds `--ozone-platform=wayland`, otherwise the existing display configuration passes through untouched. If it is absent, the lowest-numbered `wayland-<n>` socket is taken from the inherited `XDG_RUNTIME_DIR` first, then from `/run/user/<uid>`. A socket in the inherited directory (or with no `XDG_RUNTIME_DIR` set) sets `WAYLAND_DISPLAY=wayland-<n>` and the matching `XDG_RUNTIME_DIR`; a socket found only in the fallback directory while a different `XDG_RUNTIME_DIR` is set is passed as an absolute path and the inherited directory is left alone, so the launcher never emits a relative name that disagrees with the runtime directory. With no socket the environment is not changed and no flag is added. Extra CLI arguments and SIGINT, SIGTERM and SIGHUP are forwarded. The launcher is Linux-only: it calls `process.getuid()` and looks for Wayland sockets under `/run/user/<uid>`.
 
+
+## Native Windows selected files and path discovery (phase 1)
+
+This step intentionally separates **directly selected files** from **root-confined community asset packs**. On Windows, Georama can validate native `C:\\...` paths, read selected `.json` / `.wonderdraft_map` data through a held file handle with the existing byte caps and change-detection checks, parse Windows config paths, and discover configured or conventional Wonderdraft directories (`ProgramFiles`, `ProgramFiles(x86)`, `APPDATA`, user home). Root scanning accepts canonical drive paths with the existing depth and entry budgets.
+
+The Windows path policy currently accepts only **normalized, fully drive-qualified paths**. UNC shares, device/verbatim prefixes, drive-relative paths, alternate data streams, reserved device names, dot/dotdot segments, and trailing dot/space components are intentionally rejected. The POSIX path contract and Linux discovery remain unchanged.
+
+**Security limit:** Windows selected-file symlink-leaf checks use a preliminary `lstat`, which is not an atomic no-follow open. Unlike the Linux `O_NOFOLLOW` behavior, a concurrent local actor could replace the leaf between check and open. This API is for an explicitly selected trusted local path, and must not be exposed as an arbitrary renderer-chosen filesystem read capability. File reads still use a single held handle after opening, with size limits, bounded read loops and held-file metadata checks. Device/UNC paths are out of scope until separately reviewed.
+
+**Phase 2 (experimental): Windows asset file reads.** `readAssetFile()` can now use a native Windows helper to read files beneath an explicit root. `openPckFile()` remains Linux-only. A missing native helper fails closed rather than falling back to unsafe joined-path JavaScript reads. Windows asset loading does not work in packaged releases until the executable is bundled and authenticated; root discovery does not create a renderer IPC read capability.
+
+Windows Node 22 checks:
+
+```powershell
+npm run build
+npx vitest run tests/unit/native-path.test.ts tests/unit/windows-selected-files.test.ts
+```
+
+Linux regression checks are in `.github/workflows/windows-file-paths.yml` together with the Windows build and native-file tests. This phase does not claim that the Linux-specific full unit suite is green on Windows or that the application now loads Wonderdraft assets natively.
+
+
+## Native Windows secure asset reader (phase 2 — experimental)
+
+Windows user asset files now use an optional dedicated C++17 executable, not the Linux /proc/self/fd backend and not a JavaScript lstat/open preflight. The helper uses Win32 CreateFileW with FILE_FLAG_OPEN_REPARSE_POINT and keeps open directory/file handles without FILE_SHARE_DELETE. Each opened object is checked for a reparse point and its final DOS name is compared against its held parent. Only data verified through bounded reads and before/after metadata is emitted. Errors contain no user paths; Linux behavior remains unchanged.
+
+Build prerequisite: install Visual Studio 2022 C++ Build Tools (MSVC x64) **and the Windows 10/11 SDK** using the *Desktop development with C++* workload. Finding `cl.exe` on `PATH` is not sufficient: `INCLUDE` and `LIB` must point to both the SDK and MSVC standard headers/libraries. The build script checks these directories and, if necessary, uses `vswhere` + `vcvars64.bat` to initialize the complete environment automatically—even when an uninitialized `cl.exe` is already on `PATH`. If that fails, install/repair the SDK from Visual Studio Installer or build in an *x64 Native Tools Command Prompt*. Output resides in the git-ignored `out/windows` directory.
+
+Run on Windows (Node 22, after npm ci):
+
+~~~powershell
+node scripts/build-win-asset-helper.mjs
+npm run build
+npx vitest run tests/unit/msvc-environment.test.ts tests/unit/windows-asset-bridge.test.ts tests/unit/windows-asset-reader.test.ts tests/unit/windows-asset-races.test.ts tests/unit/windows-selected-files.test.ts tests/unit/native-path.test.ts
+~~~
+
+The Windows tests require a compiled helper; missing helper is a failing test, not a skip. The CI workflow builds it and exercises real junctions, path refusal, size limits, handle release and concurrent directory replacement. Linux CI runs the original asset tests.
+
+Limits: this is an experimental design pending native CI and independent security review, not a proof across every Windows filesystem/filter driver. The backend spawns a process per asset and now enforces a four-helper concurrency budget, bounded stdout, a 60-second deadline and a three-second post-termination grace. A child that fails to close retains its slot (fail closed). The helper location is bound once to the trusted Electron application root (`app.getAppPath()`), with the developer executable under `out/windows`; it is not resolved from the process working directory. It is not yet production-packaged or authenticated. Root symlinks, UNC/network shares, native PCK archives, stronger packaging/authenticity checks and performance tuning are separate phases. Directly selected map/config files keep their separate security policy.
+
 ## Layout
 
 - `electron/` — sandboxed application shell, custom protocol, narrow IPC, preload bridge.

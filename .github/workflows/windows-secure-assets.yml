@@ -1,0 +1,60 @@
+name: Native Windows asset handles
+
+on:
+  pull_request:
+  push:
+    branches: [main, 'feat/windows-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Do not spend runner minutes on superseded feature-branch commits.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Portable bridge and original secure Linux asset tests
+        run: >-
+          npx vitest run
+          tests/unit/msvc-environment.test.ts
+          tests/unit/windows-asset-bridge.test.ts
+          tests/unit/windows-asset-config.test.ts
+          tests/unit/assets-open.test.ts
+          tests/unit/assets-store.test.ts
+
+  windows-native:
+    # Optional organization/repository Actions variable with runner JSON.
+    # Defaults to GitHub-hosted Windows when no org runner is configured.
+    runs-on: ${{ fromJSON(vars.GEORAMA_WINDOWS_RUNNER_JSON || '"windows-latest"') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Compile Win32 reader with MSVC
+        run: node scripts/build-win-asset-helper.mjs
+      - name: Windows native read, integration and adversarial tests
+        run: >-
+          npx vitest run
+          tests/unit/native-path.test.ts
+          tests/unit/msvc-environment.test.ts
+          tests/unit/windows-asset-bridge.test.ts
+          tests/unit/windows-asset-config.test.ts
+          tests/unit/windows-selected-files.test.ts
+          tests/unit/windows-asset-reader.test.ts
+          tests/unit/windows-asset-races.test.ts

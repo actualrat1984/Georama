@@ -431,11 +431,21 @@ describe('6. hostile structure', () => {
   });
 
   it('a 10M sparse symbols array -> LIMIT without iterating', () => {
-    timed(() => {
-      // eslint-disable-next-line no-sparse-arrays
-      const huge = new Array(10_000_000) as unknown as GdValue;
-      expectWdError(() => wdMapFromGd(withEntry(makeSyntheticRoot(), 'symbols', huge)), 'LIMIT', '/symbols');
-    }, 200);
+    // Building a 10M-slot fixture can trigger allocation and GC pauses. Keep
+    // that work outside the timed operation and forbid reading any array slot.
+    const huge = new Proxy(new Array<GdValue>(10_000_000), {
+      get(target, property, receiver) {
+        if (typeof property === 'string' && /^[0-9]+$/.test(property)) {
+          throw new Error('oversized symbols array was indexed before its length was rejected');
+        }
+        return Reflect.get(target, property, receiver);
+      },
+      ownKeys() {
+        throw new Error('oversized symbols array was enumerated before its length was rejected');
+      },
+    });
+    const invalid = withEntry(makeSyntheticRoot(), 'symbols', huge);
+    timed(() => expectWdError(() => wdMapFromGd(invalid), 'LIMIT', '/symbols'), 200);
   });
 
   it('a 50MB points string -> LIMIT', () => {
