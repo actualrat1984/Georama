@@ -1,0 +1,46 @@
+name: Windows portable preview acceptance
+
+on:
+  push:
+    branches: ['feat/windows-portable-package']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  portable-package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Build native helper and unsigned portable folder + ZIP
+        run: npm run package:win:portable
+      - name: Verify staged folder and extracted ZIP independently
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $folders = @(Get-ChildItem -LiteralPath 'out/portable' -Directory)
+          if ($folders.Count -ne 1) { throw 'Expected exactly one freshly built portable folder' }
+          $source = $folders[0].FullName
+          node scripts/verify-win-portable.mjs "$source"
+          if ($LASTEXITCODE -ne 0) { throw 'Staged folder verification failed' }
+          $archive = "$source.zip"
+          if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { throw 'ZIP is missing' }
+          $expanded = Join-Path $env:RUNNER_TEMP 'georama-portable-extracted'
+          Expand-Archive -LiteralPath $archive -DestinationPath $expanded
+          $manifests = @(Get-ChildItem -LiteralPath $expanded -Filter 'georama-manifest.json' -File -Recurse)
+          if ($manifests.Count -ne 1) { throw 'Expected exactly one extracted manifest' }
+          node scripts/verify-win-portable.mjs "$($manifests[0].Directory.FullName)"
+          if ($LASTEXITCODE -ne 0) { throw 'Extracted ZIP verification failed' }
+
+# This verifies copy integrity in an unsigned developer preview, NOT code signing,
+# publisher authentication, native filesystem security, or Windows editor parity.
