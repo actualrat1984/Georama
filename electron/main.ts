@@ -4,6 +4,7 @@ import type { WebContents } from 'electron';
 import { BRAND } from '../src/shared/brand.ts';
 import type { AppInfo } from '../src/shared/ipc.ts';
 import { registerIpc } from './ipc.ts';
+import { configureWindowsAssetHelper } from './assets/windows-read.ts';
 import { createNavigationGuard, isEditorDocument } from './navigation-guard.ts';
 import { installNetwork } from './network.ts';
 import { installAppProtocol, registerAppScheme } from './protocol.ts';
@@ -107,6 +108,7 @@ if (!e2e && !app.requestSingleInstanceLock()) {
     // The network lockdown must be complete before anything can load.
     await network.prepareSession(session.defaultSession);
     installAppProtocol();
+    if (process.platform === 'win32') configureWindowsAssetHelper(app.getAppPath());
     registerIpc(appInfo, () => mainWindow?.webContents ?? null, editorUrl);
     createEditorWindow();
   }).catch((error: unknown) => {

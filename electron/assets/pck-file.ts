@@ -274,8 +274,9 @@ class HeldPckFile implements PckFile {
 }
 
 export async function openPckFile(installRoot: string): Promise<PckFile> {
-  const root = validateRoot(installRoot);
+  // Fail closed until a Windows held-handle implementation is independently verified.
   if (process.platform !== 'linux') fail('IO', 'Archive reader requires Linux descriptor paths');
+  const root = validateRoot(installRoot);
   let rootHandle: FileHandle | undefined;
   let archiveHandle: FileHandle | undefined;
   const done = async (error: unknown): Promise<never> => {
