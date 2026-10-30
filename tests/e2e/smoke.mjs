@@ -226,12 +226,21 @@ try {
     assert.equal(info.e2e, true);
   });
 
+  await check('asset IPC refuses unselected roots and arbitrary file references', async () => {
+    const unavailable = await page.evaluate("window.georama.readUserImage('symbol', 'user://assets/p/tree')");
+    assert.deepEqual(unavailable, { ok: false, code: 'NOT_SELECTED' });
+    const forbidden = await page.evaluate("window.georama.readUserImage('symbol', 'res://sprites/tree')");
+    assert.deepEqual(forbidden, { ok: false, code: 'INVALID' });
+    const absolute = await page.evaluate("window.georama.readUserImage('symbol', 'C:\\\\private\\\\secret.png')");
+    assert.deepEqual(absolute, { ok: false, code: 'INVALID' });
+  });
+
   await check('renderer has no Node globals', async () => {
     assert.deepEqual(await page.evaluate('[typeof require, typeof process, typeof module]'), ['undefined', 'undefined', 'undefined']);
   });
 
   await check('minimal frozen preload API', async () => {
-    assert.deepEqual(await page.evaluate('Object.keys(window.georama)'), ['getAppInfo']);
+    assert.deepEqual(await page.evaluate('Object.keys(window.georama)'), ['getAppInfo', 'selectUserAssets', 'readUserImage']);
     assert.equal(await page.evaluate('Object.isFrozen(window.georama)'), true);
   });
 

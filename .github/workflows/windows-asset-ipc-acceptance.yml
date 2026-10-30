@@ -1,0 +1,36 @@
+name: Guarded asset IPC contracts
+
+on:
+  push:
+    branches: ['feat/asset-ipc-capabilities']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ipc-contracts:
+    name: IPC contracts on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Main-process sender identity and guarded user-asset capability contracts
+        run: npx vitest run tests/unit/ipc-sender.test.ts tests/unit/asset-ipc.test.ts
+
+# Interactive native directory selection and packaged helper execution
+# require the separate human-operated Windows smoke test; this CI does not
+# claim to prove native helper provenance or complete IPC/browser security.

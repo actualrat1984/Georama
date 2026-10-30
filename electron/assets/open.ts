@@ -1,7 +1,8 @@
 import fs from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { constants } from 'node:fs';
-import path from 'node:path';
+import { isNativeAbsolutePath } from '../native-path.ts';
+import { readWindowsAsset } from './windows-read.ts';
 
 export const ASSET_FILE_LIMITS = Object.freeze({
   maxBytes: 64 * 1024 * 1024,
@@ -10,7 +11,7 @@ export const ASSET_FILE_LIMITS = Object.freeze({
   maxSegmentBytes: 255,
 });
 
-export type AssetFileErrorCode = 'PATH' | 'EXTENSION' | 'LIMIT' | 'MISSING' | 'TYPE' | 'IO';
+export type AssetFileErrorCode = 'PATH' | 'EXTENSION' | 'LIMIT' | 'MISSING' | 'TYPE' | 'IO' | 'BUSY';
 
 export class AssetFileError extends Error {
   readonly code: AssetFileErrorCode;
@@ -25,8 +26,7 @@ const BAD_CHAR = /[\x00-\x1f\x7f-\x9f\u2028\u2029\u202a-\u202e\u2066-\u2069\ufef
 const DATA_SUFFIXES = Object.freeze(['.png', '.wonderdraft_image', '.wonderdraft_symbols', '.wonderdraft_theme']);
 
 function validate(root: string, relative: string, maxBytes: number): string[] {
-  if (typeof root !== 'string' || root.length === 0 || root.length > ASSET_FILE_LIMITS.maxPathChars ||
-      !root.startsWith('/') || /[\x00-\x1f\x7f-\x9f\p{Surrogate}]/u.test(root) || path.posix.normalize(root) !== root) {
+  if (!isNativeAbsolutePath(root, process.platform, ASSET_FILE_LIMITS.maxPathChars)) {
     throw new AssetFileError('PATH', 'Asset root must be a normalized absolute directory');
   }
   if (typeof relative !== 'string' || relative.length === 0 || relative.length > ASSET_FILE_LIMITS.maxPathChars ||
@@ -57,26 +57,35 @@ function ioError(error: unknown): AssetFileError {
 }
 
 /**
- * Linux-only, read-only byte access beneath an explicitly authorized directory.
- * The explicit root may be a symlink; after canonicalizing it, verify the opened
- * directory identity. Every descendant is opened via a held parent descriptor
- * and O_NOFOLLOW, not by rechecking a joined pathname before a later open.
- * Descendant symlinks (even internal ones) are refused. O_NONBLOCK ensures FIFOs
- * cannot hang an open before fstat rejects non-regular files.
+ * Read-only byte access beneath an explicitly authorized directory.
  *
- * This is not a PNG/JSON validator or an IPC capability. Callers must validate
- * the returned bytes. In-place concurrent content changes are rejected when
- * size/mtime/ctime changes; no claim of an atomic snapshot against a privileged
- * actor restoring timestamps is made. Hardlinks are not distinguishable from
- * regular files, and mount/namespace manipulation is outside this boundary.
+ * Linux retains its original held-parent-descriptor /proc/self/fd traversal,
+ * O_NOFOLLOW and O_NONBLOCK semantics (including a symlinked explicit root).
+ * Windows delegates to a separate native helper that holds Win32 directory
+ * handles without FILE_SHARE_DELETE, opens each child without reparse traversal,
+ * checks opened-handle identity, and returns bytes only after verifying them.
+ * Missing/failed native helper => IO, never an unsafe JavaScript fallback.
+ *
+ * This is not an IPC capability or a PNG/JSON validator. Callers must validate
+ * the returned bytes. Neither backend promises atomic snapshots against actors
+ * modifying bytes while restoring all observed metadata. Hardlinks, privileged
+ * volume manipulation and filesystem filter behavior need separate review.
  */
 export async function readAssetFile(
   root: string,
   relative: string,
   maxBytes: number = ASSET_FILE_LIMITS.maxBytes,
 ): Promise<Uint8Array> {
+  if (process.platform !== 'linux' && process.platform !== 'win32') {
+    throw new AssetFileError('IO', 'Asset reader requires a supported filesystem backend');
+  }
   const parts = validate(root, relative, maxBytes);
-  if (process.platform !== 'linux') throw new AssetFileError('IO', 'Asset reader requires Linux descriptor paths');
+  if (process.platform === 'win32') {
+    const result = await readWindowsAsset(root, relative, maxBytes);
+    if (result.bytes !== undefined) return result.bytes;
+    const code = result.error ?? 'IO';
+    throw new AssetFileError(code, code === 'LIMIT' ? 'Asset exceeds byte limit' : 'Could not read asset data');
+  }
   const handles: FileHandle[] = [];
   let result: Uint8Array | undefined;
   let failure: AssetFileError | undefined;
