@@ -75,8 +75,9 @@ export async function readAssetFile(
   relative: string,
   maxBytes: number = ASSET_FILE_LIMITS.maxBytes,
 ): Promise<Uint8Array> {
-  const parts = validate(root, relative, maxBytes);
+  // No Windows descriptor-confined backend yet; do not allow any filesystem I/O.
   if (process.platform !== 'linux') throw new AssetFileError('IO', 'Asset reader requires Linux descriptor paths');
+  const parts = validate(root, relative, maxBytes);
   const handles: FileHandle[] = [];
   let result: Uint8Array | undefined;
   let failure: AssetFileError | undefined;

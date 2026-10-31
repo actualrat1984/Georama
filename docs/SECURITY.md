@@ -28,6 +28,17 @@ Defence in depth: each layer is meant to hold on its own. Code is in `electron/`
 
 Why the main frame is judged on *commits*: `did-start-navigation` also fires for attempts that `will-navigate` then cancels (a dropped file, an external link). Recovering from those would throw away unsaved editor state for something already harmless. Child frames are judged on attempts, because only the page itself can create one and the app has none; CSP (`default-src 'none'`) blocks URL frames, while `about:blank` and `srcdoc` frames, which CSP does not cover, commit and are caught.
 
+
+## Native Windows filesystem support — staged guarantee
+
+Windows selected-map and configuration reads are separate from Georama's root-confined asset reading. The asset and PCK readers still require Linux descriptor-relative filesystem semantics and explicitly refuse native Windows before performing filesystem I/O. Recognizing a configured Windows Wonderdraft folder does not authorize asset reads.
+
+Windows path validation accepts only normalized drive-qualified absolute paths, rejecting ambiguous device, share, stream and relative forms. It provides path syntax screening, not filesystem confinement.
+
+The selected-file reader is intended for trusted explicit local selections. It keeps a single open file handle during bounded reads, checks file type and metadata, and performs a preliminary Windows symbolic-link leaf check. That preliminary check does **not** provide the same atomic no-follow guarantee as the Linux version. This limitation is acceptable only for the current direct-selected-file use, which is not available to untrusted renderer IPC. It is not sufficient for implementing confined asset-pack reads.
+
+A subsequent Windows asset backend requires independent security review and native tests for links, junctions, path replacement, archive consistency, size limits, concurrent reads and cleanup. The existing Linux backend remains unchanged.
+
 ## How it is verified
 
 * `npm test`: unit tests for the allow-list (table of 25+ URLs), the ordering of the network lockdown against window creation, the navigation guard (fake clock, rate limit, hash changes), `isTrustedSender`, the protocol core (traversal variants, symlinks, HEAD without a body read, 405/413/414, headers on every response), and the **wiring** of `registerIpc` and `installSecurity` with Electron mocked, so removing a check turns a test red.
