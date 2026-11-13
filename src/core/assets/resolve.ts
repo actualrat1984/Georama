@@ -170,7 +170,7 @@ export function symbolSetRef(image: AssetRef): AssetRef {
   return { source: 'user', pack: image.pack, relPath: image.relPath.slice(0, cut + 1) + SYMBOL_META_NAME };
 }
 
-/** The image name without the appended extension, e.g. `stall 1`. */
+/** The image name without the appended extension, e.g. `sample item 1`. */
 export function imageBaseName(image: AssetRef): string {
   if (image.source === 'pck') {
     const last = image.path.slice(image.path.lastIndexOf('/') + 1);

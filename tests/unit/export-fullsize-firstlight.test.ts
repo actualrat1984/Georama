@@ -6,8 +6,8 @@ import { buildFirstLightLayers, type RgbaRaster } from '../../src/core/firstligh
 // pass on the existing builder; it is not a RED test. A failure would show a size limit that the detail
 // does not know about.
 
-const W = 1100;
-const H = 600;
+const W = 2048;
+const H = 1024;
 const THRESHOLD = 156;
 
 function raster(width: number, height: number, at: (x: number, y: number) => number[]): RgbaRaster {
@@ -34,9 +34,9 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
 }
 
 describe('first-light builder at a full map size (above WINDOW_SIZE)', () => {
-  it('accepts a 1100 x 600 window at the origin and returns rasters of the same size', () => {
-    // Land (alpha 255) on the left 550 columns, water (alpha 0) on the right.
-    const mask = raster(W, H, (x) => [0, 0, 0, x < 550 ? 255 : 0]);
+  it('accepts a 2048 x 1024 window at the origin and returns rasters of the same size', () => {
+    // Land (alpha 255) on the left 1024 columns, water (alpha 0) on the right.
+    const mask = raster(W, H, (x) => [0, 0, 0, x < 1024 ? 255 : 0]);
     const ground = raster(W, H, () => [120, 100, 80, 255]);
     const tint = raster(W, H, () => [255, 255, 255, 255]);
 
@@ -59,7 +59,7 @@ describe('first-light builder at a full map size (above WINDOW_SIZE)', () => {
     // A full-map window copies the input mask, byte for byte.
     expect(sameBytes(out.mask.data, mask.data)).toBe(true);
     // Every texel is land or water, and the split follows the threshold rule (alpha >= 156 is land).
-    expect(out.stats.land).toBe(550 * H);
+    expect(out.stats.land).toBe(1024 * H);
     expect(out.stats.land + out.stats.water).toBe(W * H);
   });
 });

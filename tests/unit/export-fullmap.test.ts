@@ -27,8 +27,8 @@ function codeOf(fn: () => unknown): string {
 }
 
 describe('fullMapExtent', () => {
-  it('returns the full extent of a 1100 x 600 mask, at the origin', () => {
-    expect(fullMapExtent(bare(1100, 600))).toEqual({ x0: 0, y0: 0, width: 1100, height: 600 });
+  it('returns the full extent of a 2048 x 1024 mask, at the origin', () => {
+    expect(fullMapExtent(bare(2048, 1024))).toEqual({ x0: 0, y0: 0, width: 2048, height: 1024 });
   });
 
   it('refuses a side above 8192 with code limit', () => {
@@ -42,19 +42,19 @@ describe('fullMapExtent', () => {
 
 describe('checkFullMapRasters', () => {
   it('accepts three rasters of the mask size', () => {
-    const mask = raster(1100, 600);
-    expect(() => checkFullMapRasters(mask, raster(1100, 600), raster(1100, 600))).not.toThrow();
+    const mask = raster(2048, 1024);
+    expect(() => checkFullMapRasters(mask, raster(2048, 1024), raster(2048, 1024))).not.toThrow();
   });
 
   it('refuses a ground raster of another width with code param', () => {
-    const mask = raster(1100, 600);
-    expect(codeOf(() => checkFullMapRasters(mask, raster(1099, 600), raster(1100, 600)))).toBe('param');
+    const mask = raster(2048, 1024);
+    expect(codeOf(() => checkFullMapRasters(mask, raster(1024, 1024), raster(2048, 1024)))).toBe('param');
   });
 
   it('refuses a tint with a short buffer with code length', () => {
-    const mask = raster(1100, 600);
-    const shortTint: RgbaRaster = { width: 1100, height: 600, data: new Uint8Array(10) };
-    expect(codeOf(() => checkFullMapRasters(mask, raster(1100, 600), shortTint))).toBe('length');
+    const mask = raster(2048, 1024);
+    const shortTint: RgbaRaster = { width: 2048, height: 1024, data: new Uint8Array(10) };
+    expect(codeOf(() => checkFullMapRasters(mask, raster(2048, 1024), shortTint))).toBe('length');
   });
 
   it('refuses a mask above the side cap with code limit', () => {

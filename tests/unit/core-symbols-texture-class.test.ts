@@ -8,8 +8,8 @@ import { classifySymbolTexture } from '../../src/core/symbols/texture-class.ts';
 const validTexts: string[] = [
   'res://sprites/synthetic/tex_02',
   'res://sprites/synthetic/tex_03 02',
-  'res://packs/ember_test/sprites/symbols/hall_set/stall 1',
-  'user://assets/ember_test/sprites/trees/Pine-A/Pine-A-07',
+  'res://packs/sample_pack/sprites/symbols/sample_set/sample item 1',
+  'user://assets/sample_pack/sprites/trees/Pine-A/Pine-A-07',
   'user://assets/north_pack/symbols/harbor_set/dock 03',
   'res://sprites/symbols/meadow_set/Ink & Wash (Draft)',
 ];
