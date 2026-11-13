@@ -57,11 +57,11 @@ const validCases: ValidCase[] = [
   },
   {
     kind: 'symbol',
-    text: 'user://assets/Sample Pack/sprites/trees/Pine-A/Pine-A-07',
-    ref: { source: 'user', pack: 'Sample Pack', relPath: 'sprites/trees/Pine-A/Pine-A-07.png' },
-    key: 'user:Sample Pack/sprites/trees/Pine-A/Pine-A-07.png',
-    setRef: { source: 'user', pack: 'Sample Pack', relPath: 'sprites/trees/Pine-A/.wonderdraft_symbols' },
-    base: 'Pine-A-07',
+    text: 'user://assets/Sample Pack/sprites/trees/tree-a/tree-a-07',
+    ref: { source: 'user', pack: 'Sample Pack', relPath: 'sprites/trees/tree-a/tree-a-07.png' },
+    key: 'user:Sample Pack/sprites/trees/tree-a/tree-a-07.png',
+    setRef: { source: 'user', pack: 'Sample Pack', relPath: 'sprites/trees/tree-a/.wonderdraft_symbols' },
+    base: 'tree-a-07',
   },
   {
     kind: 'symbol',

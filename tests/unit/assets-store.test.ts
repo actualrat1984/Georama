@@ -540,15 +540,15 @@ describe('asset store vertical 5: roots, links and close failure', () => {
       { path: 'res://sprites/synthetic/tree.wonderdraft_image', data: png },
     ]));
     const userDataRoot = path.join(base, 'user');
-    const packDir = path.join(userDataRoot, 'assets', 'café & co', 'trees');
+    const packDir = path.join(userDataRoot, 'assets', 'sample é & co', 'trees');
     await fs.mkdir(packDir, { recursive: true });
     await fs.writeFile(path.join(packDir, 'sample item 1 (old).png'), png);
     const store = await createAssetStore({ installRoot: `${installRoot}/`, userDataRoot: `${userDataRoot}/` });
     openStores.push(store);
     const builtin = await store.readImage('symbol', 'res://sprites/synthetic/tree');
     expect(builtin.bytes).toEqual(png);
-    const user = await store.readImage('symbol', 'user://assets/café & co/trees/sample item 1 (old)');
-    expect(user.key).toBe('user:café & co/trees/sample item 1 (old).png');
+    const user = await store.readImage('symbol', 'user://assets/sample é & co/trees/sample item 1 (old)');
+    expect(user.key).toBe('user:sample é & co/trees/sample item 1 (old).png');
     expect(user.bytes).toEqual(png);
   });
 

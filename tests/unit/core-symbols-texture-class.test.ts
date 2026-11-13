@@ -9,7 +9,7 @@ const validTexts: string[] = [
   'res://sprites/synthetic/tex_02',
   'res://sprites/synthetic/tex_03 02',
   'res://packs/sample_pack/sprites/symbols/sample_set/sample item 1',
-  'user://assets/sample_pack/sprites/trees/Pine-A/Pine-A-07',
+  'user://assets/sample_pack/sprites/trees/tree-a/tree-a-07',
   'user://assets/north_pack/symbols/harbor_set/dock 03',
   'res://sprites/symbols/meadow_set/Ink & Wash (Draft)',
 ];
