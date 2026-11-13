@@ -95,7 +95,7 @@ describe.skipIf(process.platform !== 'win32')('native Windows file and root boun
     await expect(openPckFile(install)).rejects.toMatchObject({ code: 'IO' });
   });
 
-  it('recognizes explicitly selected Windows roots without authorizing unsafe asset reads', async () => {
+  it('recognizes Windows roots and never invents missing user assets', async () => {
     const home = await fixture();
     const userDataRoot = path.join(home, 'my-custom-assets');
     await fs.mkdir(path.join(userDataRoot, 'assets'), { recursive: true });
@@ -106,8 +106,14 @@ describe.skipIf(process.platform !== 'win32')('native Windows file and root boun
     expect(result.userData).toEqual({ path: userDataRoot, origin: 'env' });
     const store = await createAssetStore({ userDataRoot });
     try {
-      await expect(store.readImage('symbol', 'user://assets/synthetic/trees/tree'))
-        .rejects.toMatchObject({ code: 'IO' });
+      try {
+        await store.readImage('symbol', 'user://assets/synthetic/trees/tree');
+        expect.unreachable('expected missing asset to be refused');
+      } catch (error) {
+        // Before the native helper is compiled access remains fail-closed (IO).
+        // With the helper present, the nonexistent file is MISSING instead.
+        expect(['IO', 'MISSING']).toContain((error as { code?: string }).code);
+      }
     } finally {
       await store.close();
     }

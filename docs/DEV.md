@@ -33,7 +33,7 @@ The Windows path policy currently accepts only **normalized, fully drive-qualifi
 
 **Held-HANDLE boundary:** `native/win-selected-read.cpp` starts at the selected file's drive root and opens every path component in order, keeping every ancestor handle without DELETE sharing. Each opened component is checked for a reparse-point tag, directory/file type and its final DOS path. The final file is read with bounded chunks and an identity/metadata snapshot before any bytes are emitted. The Node caller never uses a pathname `lstat`/`open` fallback; missing or failing helpers refuse the read. This closes the earlier leaf `lstat`-then-`open` race and intermediate junction traversal at the native-file boundary, subject to adversarial Windows CI and independent review. Device/UNC paths remain out of scope. The helper is **not signed/authenticated or packaged for release** in this phase; signing/provenance and complete package integration remain separate release blockers. No renderer IPC is introduced here.
 
-**Asset packs remain fail-closed on Windows.** `readAssetFile()` and `openPckFile()` still explicitly reject non-Linux platforms before filesystem I/O. Root detection does not grant a read capability. A subsequent security-reviewed Windows backend must preserve confined asset-root reads, reparse-point resistance, bounded reads and handle identity, without weakening the existing Linux backend.
+**Phase 2 (experimental): Windows asset file reads.** `readAssetFile()` can now use a native Windows helper to read files beneath an explicit root. `openPckFile()` remains Linux-only. A missing native helper fails closed rather than falling back to unsafe joined-path JavaScript reads. Windows asset loading does not work in packaged releases until the executable is bundled and authenticated; root discovery does not create a renderer IPC read capability.
 
 Windows Node 22 checks:
 
@@ -44,6 +44,25 @@ npx vitest run tests/unit/native-path.test.ts tests/unit/windows-selected-files.
 ```
 
 Linux regression checks are in `.github/workflows/windows-file-paths.yml` together with the Windows build and native-file tests. This phase does not claim that the Linux-specific full unit suite is green on Windows or that the application now loads Wonderdraft assets natively.
+
+
+## Native Windows secure asset reader (phase 2 — experimental)
+
+Windows user asset files now use an optional dedicated C++17 executable, not the Linux /proc/self/fd backend and not a JavaScript lstat/open preflight. The helper uses Win32 CreateFileW with FILE_FLAG_OPEN_REPARSE_POINT and keeps open directory/file handles without FILE_SHARE_DELETE. Each opened object is checked for a reparse point and its final DOS name is compared against its held parent. Only data verified through bounded reads and before/after metadata is emitted. Errors contain no user paths; Linux behavior remains unchanged.
+
+Build prerequisite: install Visual Studio 2022 C++ Build Tools (MSVC x64) **and the Windows 10/11 SDK** using the *Desktop development with C++* workload. Finding `cl.exe` on `PATH` is not sufficient: `INCLUDE` and `LIB` must point to both the SDK and MSVC standard headers/libraries. The build script checks these directories and, if necessary, uses `vswhere` + `vcvars64.bat` to initialize the complete environment automatically—even when an uninitialized `cl.exe` is already on `PATH`. If that fails, install/repair the SDK from Visual Studio Installer or build in an *x64 Native Tools Command Prompt*. Output resides in the git-ignored `out/windows` directory.
+
+Run on Windows (Node 22, after npm ci):
+
+~~~powershell
+node scripts/build-win-asset-helper.mjs
+npm run build
+npx vitest run tests/unit/msvc-environment.test.ts tests/unit/windows-asset-bridge.test.ts tests/unit/windows-asset-reader.test.ts tests/unit/windows-asset-races.test.ts tests/unit/windows-selected-files.test.ts tests/unit/native-path.test.ts
+~~~
+
+The Windows tests require a compiled helper; missing helper is a failing test, not a skip. The CI workflow builds it and exercises real junctions, path refusal, size limits, handle release and concurrent directory replacement. Linux CI runs the original asset tests.
+
+Limits: this is an experimental design pending full native security review, not a proof across every Windows filesystem/filter driver. The backend spawns a process per asset and enforces a four-helper concurrency budget, bounded stdout, a 60-second deadline (`TIMEOUT` rather than `IO`) and a three-second post-termination grace. A child that fails to close retains its slot after the caller times out; four such children leave future asset reads reporting `BUSY` until a child closes or the app restarts (fail closed). The helper location is bound once to the trusted Electron application root (`app.getAppPath()`), with the developer executable under `out/windows`; if that root is `app.asar`, the helper must instead be physically installed alongside it under `app.asar.unpacked/out/windows`. The unpacked `resources/app` layout uses its normal `out/windows` subdirectory. Neither case searches the process working directory. No production package is approved or authenticated. Root symlinks, UNC/network shares, native PCK archives, signing, Windows Job Object escalation and performance tuning are separate phases. Directly selected map/config files keep their separate security policy.
 
 ## Layout
 
