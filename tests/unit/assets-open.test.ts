@@ -301,10 +301,10 @@ describe('scoped Linux asset byte reader', () => {
     });
     await fails(readAssetFile(root, 'pack/leaf.png', 6), 'LIMIT');
   });
-  it('refuses unsupported platforms before filesystem access', async () => {
+  it('refuses operating systems without a native asset backend before filesystem access', async () => {
     const { root } = await fixture();
     const source = new URL('../../electron/assets/open.ts', import.meta.url).href;
-    const script = `Object.defineProperty(process,'platform',{value:'win32'});` +
+    const script = `Object.defineProperty(process,'platform',{value:'darwin'});` +
       `const {readAssetFile,AssetFileError}=await import(${JSON.stringify(source)});` +
       `try{await readAssetFile(${JSON.stringify(root)},'pack/leaf.png');process.exitCode=2;}` +
       `catch(e){if(!(e instanceof AssetFileError)||e.code!=='IO')throw e;console.log('IO');}`;

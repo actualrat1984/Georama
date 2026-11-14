@@ -1,0 +1,73 @@
+name: Guarded asset IPC contracts
+
+on:
+  push:
+    branches: ['feat/asset-ipc-capabilities']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ipc-contracts:
+    name: IPC contracts on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Main-process sender identity and guarded user-asset capability contracts
+        run: npx vitest run tests/unit/ipc-sender.test.ts tests/unit/asset-ipc.test.ts tests/unit/asset-ipc-platform.test.ts
+
+  packaged-ipc:
+    name: Packaged real IPC/native read and forged-WebContents refusal
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Build unsigned Windows developer preview, never a release
+        run: npm run package:win:portable
+      - name: Verify staged and ZIP-extracted previews; exercise real IPC and native helper
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $folders = @(Get-ChildItem -LiteralPath 'out/portable' -Directory)
+          if ($folders.Count -ne 1) { throw 'Expected exactly one freshly built preview folder' }
+          $source = $folders[0].FullName
+          node scripts/verify-win-portable.mjs "$source"
+          if ($LASTEXITCODE -ne 0) { throw 'Staged preview verification failed' }
+          node scripts/test-win-packaged-ipc.mjs "$source" --ci-dialog-fixture
+          if ($LASTEXITCODE -ne 0) { throw 'Staged IPC integration test failed' }
+          $archive = "$source.zip"
+          if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { throw 'Missing unsigned ZIP' }
+          $extracted = Join-Path $env:RUNNER_TEMP 'georama-ipc-extracted'
+          Expand-Archive -LiteralPath $archive -DestinationPath $extracted
+          $manifests = @(Get-ChildItem -LiteralPath $extracted -Filter 'georama-manifest.json' -File -Recurse)
+          if ($manifests.Count -ne 1) { throw 'Expected exactly one extracted manifest' }
+          $fromZip = $manifests[0].Directory.FullName
+          node scripts/verify-win-portable.mjs "$fromZip"
+          if ($LASTEXITCODE -ne 0) { throw 'ZIP extraction integrity verification failed' }
+          node scripts/test-win-packaged-ipc.mjs "$fromZip" --ci-dialog-fixture
+          if ($LASTEXITCODE -ne 0) { throw 'ZIP-extracted IPC integration test failed' }
+
+# This uses the actual packaged Electron, unmodified IPC handlers, real
+# Windows helper binary, and a synthetic main-process dialog result supplied
+# through the loopback-only *test inspector*. It DOES NOT test interaction
+# with the actual Windows folder-picker UI, signing, or publisher provenance.
+# Keep the separate manual dialog test before any owner-approved release.

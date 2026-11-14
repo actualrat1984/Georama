@@ -4,6 +4,8 @@ import type { WebContents } from 'electron';
 import { BRAND } from '../src/shared/brand.ts';
 import type { AppInfo } from '../src/shared/ipc.ts';
 import { registerIpc } from './ipc.ts';
+import { registerAssetIpc } from './asset-ipc.ts';
+import { configureWindowsAssetHelper } from './assets/windows-read.ts';
 import { createNavigationGuard, isEditorDocument } from './navigation-guard.ts';
 import { installNetwork } from './network.ts';
 import { installAppProtocol, registerAppScheme } from './protocol.ts';
@@ -108,9 +110,15 @@ if (!e2e && !app.requestSingleInstanceLock()) {
     // The network lockdown must be complete before anything can load.
     await network.prepareSession(session.defaultSession);
     installAppProtocol();
-    // Selected data files require native no-follow HANDLE traversal on Windows.
-    // A missing or unsigned-to-be-reviewed helper never falls back to Node fs.
-    if (process.platform === 'win32') configureWindowsSelectedFileHelper(app.getAppPath());
+    // Both experimental Windows readers use native held-HANDLE traversal.
+    // A missing helper fails closed, never falling back to a JavaScript path read.
+    if (process.platform === 'win32') {
+      const appRoot = app.getAppPath();
+      configureWindowsSelectedFileHelper(appRoot);
+      configureWindowsAssetHelper(appRoot);
+      // This is a draft-only capability pending an explicit owner decision.
+      registerAssetIpc(() => mainWindow?.webContents ?? null, () => mainWindow, editorUrl);
+    }
     registerIpc(appInfo, () => mainWindow?.webContents ?? null, editorUrl);
     createEditorWindow();
   }).catch((error: unknown) => {

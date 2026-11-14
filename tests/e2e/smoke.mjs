@@ -231,8 +231,24 @@ try {
   });
 
   await check('minimal frozen preload API', async () => {
-    assert.deepEqual(await page.evaluate('Object.keys(window.georama)'), ['getAppInfo']);
+    assert.deepEqual(await page.evaluate('Object.keys(window.georama)'), process.platform === 'win32'
+      ? ['getAppInfo', 'selectUserAssets', 'readUserImage']
+      : ['getAppInfo']);
     assert.equal(await page.evaluate('Object.isFrozen(window.georama)'), true);
+  });
+
+  await check('asset IPC starts without a selected root and refuses renderer paths', async () => {
+    if (process.platform !== 'win32') {
+      assert.equal(await page.evaluate('typeof window.georama.selectUserAssets'), 'undefined');
+      assert.equal(await page.evaluate('typeof window.georama.readUserImage'), 'undefined');
+      return;
+    }
+    assert.deepEqual(await page.evaluate(`window.georama.readUserImage('symbol', 'user://assets/sample/tree')`),
+      { ok: false, code: 'NOT_SELECTED' });
+    assert.deepEqual(await page.evaluate(`window.georama.readUserImage('symbol', 'C:\\\\Windows\\\\win.ini')`),
+      { ok: false, code: 'INVALID' });
+    assert.deepEqual(await page.evaluate(`window.georama.readUserImage('symbol', 'user://assets/sample/../tree')`),
+      { ok: false, code: 'INVALID' });
   });
 
   await check('CSP response header', async () => {

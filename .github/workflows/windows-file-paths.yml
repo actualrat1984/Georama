@@ -3,7 +3,7 @@ name: Windows paths and selected files
 on:
   pull_request:
   push:
-    branches: [main, 'feat/windows-*']
+    branches: [main, 'feat/windows-*', 'feat/asset-ipc-capabilities']
   workflow_dispatch:
 
 permissions:
