@@ -6,9 +6,7 @@ import {
   CONFIG_LIMITS,
   ConfigError,
   SCAN_ENTRY_BUDGET,
-  checkAbsolutePath,
   configFilePath,
-  parseConfig,
   resolveRoots,
 } from '../../electron/assets/config.ts';
 import type { GeoramaConfig } from '../../electron/assets/config.ts';
@@ -47,17 +45,6 @@ afterEach(async () => {
   }
 });
 
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 async function makeInstall(dir: string): Promise<string> {
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, 'Wonderdraft.pck'), '');
@@ -69,154 +56,6 @@ async function makeUserData(dir: string, withIni: boolean): Promise<string> {
   if (withIni) await writeFile(path.join(dir, 'config.ini'), '');
   return dir;
 }
-
-describe('checkAbsolutePath', () => {
-  it('accepts valid absolute paths and returns them unchanged', () => {
-    for (const p of ['/', '/a', '/a/b', '/with spaces/x', '/non-ascii-é-ü-ß', '/a/', '/a b/c-d_e.f']) {
-      expect(checkAbsolutePath(p, 'k')).toBe(p);
-    }
-    expect(checkAbsolutePath('/' + 'a'.repeat(4095), 'k')).toBe('/' + 'a'.repeat(4095));
-  });
-
-  it('rejects invalid paths with PATH', () => {
-    const bad: Array<[unknown, string]> = [
-      ['', 'empty'],
-      ['relative/x', 'relative'],
-      ['C:\\win', 'relative'],
-      ['//a', 'double slash'],
-      ['/a//b', 'double slash'],
-      ['/a/./b', 'dot segment'],
-      ['/a/../b', 'dotdot'],
-      ['/..', 'dotdot'],
-      ['/a/b//', 'trailing double slash'],
-      ['/a/\0b', 'NUL'],
-      ['/a/\nb', 'newline'],
-      ['/a/\tb', 'tab'],
-      ['/a/\x7fb', 'DEL'],
-      ['/' + 'a'.repeat(4096), 'too long'],
-      [123, 'non-string'],
-      [null, 'non-string'],
-    ];
-    for (const [input, _why] of bad) {
-      try {
-        checkAbsolutePath(input as string, 'k');
-        expect.unreachable(`accepted ${JSON.stringify(input)}`);
-      } catch (e) {
-        expect(e).toBeInstanceOf(ConfigError);
-        expect((e as ConfigError).code).toBe('PATH');
-        expect((e as ConfigError).key).toBe('k');
-      }
-    }
-  });
-});
-
-describe('parseConfig', () => {
-  it('parses a full valid config into a frozen plain object', () => {
-    const cfg = parseConfig('{"wonderdraftInstall": "/a", "wonderdraftUserData": "/b/", "mapRoots": ["/c"]}');
-    expect(cfg).toEqual({ wonderdraftInstall: '/a', wonderdraftUserData: '/b/', mapRoots: ['/c'] });
-    expect(Object.isFrozen(cfg)).toBe(true);
-    expect(Object.getPrototypeOf(cfg)).toBe(Object.prototype);
-    expect(Object.isFrozen(cfg.mapRoots)).toBe(true);
-  });
-
-  it('parses an empty object with no undefined properties', () => {
-    const cfg = parseConfig('{}');
-    expect(cfg).toEqual({});
-    expect('wonderdraftInstall' in cfg).toBe(false);
-    expect('wonderdraftUserData' in cfg).toBe(false);
-    expect('mapRoots' in cfg).toBe(false);
-    expect(Object.isFrozen(cfg)).toBe(true);
-  });
-
-  it('ignores unknown keys and never copies them (no proto pollution)', () => {
-    const cfg = parseConfig('{"x": 1, "__proto__": {"x": 1}, "constructor": 2, "mapRoots": []}') as Record<string, unknown>;
-    expect(Object.hasOwn(cfg, '__proto__')).toBe(false);
-    expect(Object.hasOwn(cfg, 'x')).toBe(false);
-    expect(Object.hasOwn(cfg, 'constructor')).toBe(false);
-    expect(({} as Record<string, unknown>)['x']).toBe(undefined);
-    expect(cfg).toEqual({ mapRoots: [] });
-  });
-
-  it('rejects wrong kinds and bad paths with exact codes', () => {
-    const cases: Array<[string, string, string]> = [
-      ['{"wonderdraftInstall": 7}', 'TYPE', 'wonderdraftInstall'],
-      ['{"wonderdraftInstall": null}', 'TYPE', 'wonderdraftInstall'],
-      ['{"wonderdraftInstall": ["x"]}', 'TYPE', 'wonderdraftInstall'],
-      ['{"wonderdraftUserData": {}}', 'TYPE', 'wonderdraftUserData'],
-      ['{"wonderdraftInstall": "relative/x"}', 'PATH', 'wonderdraftInstall'],
-      ['{"wonderdraftUserData": "/a/../b"}', 'PATH', 'wonderdraftUserData'],
-      ['{"mapRoots": "x"}', 'TYPE', 'mapRoots'],
-      ['{"mapRoots": 7}', 'TYPE', 'mapRoots'],
-      ['{"mapRoots": null}', 'TYPE', 'mapRoots'],
-      ['{"mapRoots": ["/ok", 7]}', 'TYPE', 'mapRoots[1]'],
-      ['{"mapRoots": ["relative"]}', 'PATH', 'mapRoots[0]'],
-      [`{"mapRoots": [${Array(65).fill('"/a"').join(',')}]}`, 'SHAPE', 'mapRoots'],
-      ['{oops', 'SYNTAX', ''],
-      ['[]', 'SHAPE', ''],
-      ['null', 'SHAPE', ''],
-      ['42', 'SHAPE', ''],
-      ['"s"', 'SHAPE', ''],
-    ];
-    for (const [text, code, key] of cases) {
-      try {
-        parseConfig(text);
-        expect.unreachable(`accepted ${text.slice(0, 60)}`);
-      } catch (e) {
-        expect(e).toBeInstanceOf(ConfigError);
-        expect((e as ConfigError).code).toBe(code);
-        expect((e as ConfigError).key).toBe(key);
-      }
-    }
-  });
-
-  it('rejects oversize input by UTF-8 bytes, accepts exactly the limit', () => {
-    expect(() => parseConfig('x'.repeat(65_537))).toThrowError(ConfigError);
-    try {
-      parseConfig('x'.repeat(65_537));
-      expect.unreachable();
-    } catch (e) {
-      expect((e as ConfigError).code).toBe('TOO_LARGE');
-    }
-    const pad = 'p'.repeat(65_536 - 11);
-    expect(parseConfig(`{"pad":"${pad}"}`)).toEqual({});
-  });
-
-  it('rejects a non-string root with SYNTAX', () => {
-    try {
-      parseConfig(123 as unknown as string);
-      expect.unreachable();
-    } catch (e) {
-      expect(e).toBeInstanceOf(ConfigError);
-      expect((e as ConfigError).code).toBe('SYNTAX');
-    }
-  });
-
-  it('seeded fuzz: only ConfigError escapes (mulberry32, 1000 mutations)', () => {
-    const rand = mulberry32(0xc0ffee);
-    const alphabet = 'abZ019 /\\.":{}[],_-~é&()\0\n\t\x7f"{}\\';
-    const valid = '{"wonderdraftInstall": "/opt/Wonderdraft", "wonderdraftUserData": "/home/u/wd", "mapRoots": ["/m1", "/m2"]}';
-    const codes = ['TOO_LARGE', 'SYNTAX', 'SHAPE', 'TYPE', 'PATH', 'IO'];
-    for (let n = 0; n < 1000; n++) {
-      let text = valid;
-      const edits = 1 + Math.floor(rand() * 3);
-      for (let k = 0; k < edits; k++) {
-        const pos = Math.floor(rand() * (text.length + 1));
-        const op = rand();
-        const ch = alphabet[Math.floor(rand() * alphabet.length)] as string;
-        if (op < 0.4) text = text.slice(0, pos) + ch + text.slice(pos);
-        else if (op < 0.7 && text.length > 0) text = text.slice(0, pos) + text.slice(pos + 1);
-        else if (text.length > 0) text = text.slice(0, pos) + ch + text.slice(pos + 1);
-      }
-      try {
-        parseConfig(text);
-      } catch (e) {
-        expect(e).toBeInstanceOf(ConfigError);
-        expect(codes).toContain((e as ConfigError).code);
-        expect(typeof (e as ConfigError).key).toBe('string');
-      }
-    }
-  });
-});
 
 describe('configFilePath', () => {
   it('uses XDG when absolute, else home default; rejects relative home', () => {

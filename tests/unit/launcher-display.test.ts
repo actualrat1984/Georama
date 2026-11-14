@@ -138,6 +138,9 @@ describe('launcher wiring', () => {
     const before = new Map(signals.map((signal) => [signal, process.listeners(signal)]));
     const priorHangupListeners = process.listeners('SIGHUP');
     const args = ['.', '--flag=value with spaces', '$(literal; no shell)', '--ozone-platform=x11'];
+    // The launcher calls require('electron') to locate its binary. We stub
+    // spawn, so selecting a fake distribution path avoids all network I/O.
+    vi.stubEnv('ELECTRON_OVERRIDE_DIST_PATH', '/virtual-georama-electron');
     vi.stubEnv('WAYLAND_DISPLAY', '/does-not-exist/georama-test-socket');
     process.argv = ['node', 'scripts/run-electron.mjs', ...args];
     try {

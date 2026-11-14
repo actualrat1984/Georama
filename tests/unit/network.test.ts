@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
+
+// The URL/network policy is tested with synthetic App and Session objects.
+// electron/security.ts imports the Electron session only for installSecurity;
+// loading a binary here would make a unit test depend on release downloads.
+vi.mock('electron', () => ({ session: { defaultSession: {} } }));
+
 import { HOST_CATCH_ALL, installNetwork, isAllowedRequestUrl, OFFLINE_PROXY } from '../../electron/network.ts';
 
 const allowed = ['georama://app/', 'georama://app/index.html', 'georama://app/assets/a.js?x=1#x', 'blob:georama://app/27f41072-efaa-4d0e-a101-62c65a0bab64', 'data:image/png;base64,AA==', 'data:image/svg+xml,%3Csvg%3E', 'data:image/png,AA==', 'data:image/svg+xml;utf8,AA'];

@@ -210,7 +210,9 @@ describe('G1 directory hygiene: core/shared hold plain .ts files only', () => {
     });
   });
 
-  it('rejects a symlink, which the include glob would follow but a directory walk does not report', async () => {
+  // Native Windows symlink creation may require Developer Mode or privileges.
+  // Native reparse/junction rejection remains in windows-asset-races.test.ts.
+  it.skipIf(process.platform === 'win32')('rejects a symlink, which the include glob would follow but a directory walk does not report', async () => {
     await withTree(async (root) => {
       await writeFile(path.join(root, 'real.ts'), 'export {};\n');
       await symlink(path.join(root, 'real.ts'), path.join(root, 'alias.ts'));

@@ -1,0 +1,35 @@
+name: Host-aware full unit suite
+
+on:
+  push:
+    branches: ['test/platform-aware-unit-suites']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full-unit:
+    name: Full host-specific unit suite on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Full host-selected tests (Windows pretest compiles both helpers)
+        run: npm test
+
+# Both jobs use GitHub-hosted runners; no self-hosted selector is permitted.
+# No release signing, PCK-on-Windows, or GPU/Electron E2E coverage is asserted.
